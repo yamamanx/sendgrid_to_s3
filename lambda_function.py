@@ -20,6 +20,9 @@ def send_message(content, channel):
     requests.post(slack_url, data=json.dumps(payload_dic))
 
 
+def get_value(e, column):
+    return str(e.get(column, '')).replace(',', '')
+
 def logger_level(level):
     if level == 'CRITICAL':
         return 50
@@ -42,30 +45,33 @@ def lambda_handler(event, context):
     try:
         s3_bucket = boto3.resource('s3').Bucket(bucket_name)
 
-        count = 0
+        body = ''
         for e in event:
-            count += 1
-            headers = []
             rows = []
-            for key, value in e.items():
-                headers.append(str(key))
-                rows.append(str(value))
-            body = '{header}\n{row}'.format(
-                header=','.join(headers),
-                row=','.join(rows)
-            )
+            rows.append(get_value(e, 'email'))
+            rows.append(get_value(e, 'timestamp'))
+            rows.append(get_value(e, 'ip'))
+            rows.append(get_value(e, 'sg_event_id'))
+            rows.append(get_value(e, 'sg_message_id'))
+            rows.append(get_value(e, 'useragent'))
+            rows.append(get_value(e, 'event'))
+            rows.append(get_value(e, 'response'))
+            rows.append(get_value(e, 'tls'))
 
-            key_name = '{time}{id}.csv'.format(
-                time=datetime.now().strftime('%Y/%m/%d/%H/%M%S'),
-                id=e.get('sg_event_id', str(count))
-            )
+            body += ','.join(rows)
+            body += '\n'
 
 
-            s3_bucket.put_object(
-                Key=key_name,
-                Body=body,
-                ContentType='text/csv'
-            )
+        key_name = '{time}{id}.csv'.format(
+            time=datetime.now().strftime('%Y/%m/%d/%H/%M%S'),
+            id=event[0].get('sg_event_id', '')
+        )
+
+        s3_bucket.put_object(
+            Key=key_name,
+            Body=body,
+            ContentType='text/csv'
+        )
 
     except:
         logger.error(traceback.format_exc())
